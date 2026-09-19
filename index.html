@@ -408,12 +408,12 @@
 
   /* ---------------- channel config (matches FabriCreator firmware) ---------------- */
   const CHANNELS = [
-    { key:'base',       label:'Base',        idx:1, min:0, max:180, def:90 },
-    { key:'shoulder',   label:'Shoulder',    idx:2, min:0, max:180, def:90 },
-    { key:'elbow',      label:'Elbow',       idx:3, min:0, max:180, def:90 },
-    { key:'wristRoll',  label:'Wrist Roll',  idx:4, min:0, max:180, def:90 },
-    { key:'wristPitch', label:'Wrist Pitch', idx:5, min:0, max:180, def:90 },
     { key:'gripper',    label:'Gripper',     idx:6, min:0, max:90,  def:0  },
+    { key:'wristPitch', label:'Wrist Pitch', idx:5, min:0, max:180, def:90 },
+    { key:'wristRoll',  label:'Wrist Roll',  idx:4, min:0, max:180, def:90 },
+    { key:'elbow',      label:'Elbow',       idx:3, min:0, max:180, def:90 },
+    { key:'shoulder',   label:'Shoulder',    idx:2, min:0, max:180, def:90 },
+    { key:'base',       label:'Base',        idx:1, min:0, max:180, def:90 },
   ];
   const TICK_MS = 50; // 20Hz — safe headroom under 9600 baud for 6 channels
 
@@ -504,7 +504,7 @@
     const row = document.createElement('div');
     row.className = 'channel';
     row.innerHTML = `
-      <div class="chan-dot" data-dot="${i}">${i+1}</div>
+      <div class="chan-dot" data-dot="${i}">${c.idx}</div>
       <div>
         <div class="jlabel">${c.label}</div>
         <div class="jrange">${c.min}&ndash;${c.max}&deg;</div>
@@ -569,7 +569,7 @@
     CHANNELS.forEach((c, i) => {
       const p = document.createElement('div');
       p.className = 'pin';
-      p.textContent = i + 1;
+      p.textContent = c.idx;
       p.title = c.label;
       p.style.left = pins[i].x + '%';
       p.style.top = pins[i].y + '%';
@@ -908,7 +908,15 @@
       try{
         const data = JSON.parse(reader.result);
         if (!Array.isArray(data.sequence)) throw new Error('bad file');
-        sequence = data.sequence.map(k => ({ pose: k.pose.slice(0,6), dt: +k.dt || 500, auto: !!k.auto }));
+        const loadedChannels = data.channels || ['base', 'shoulder', 'elbow', 'wristRoll', 'wristPitch', 'gripper'];
+        sequence = data.sequence.map(k => {
+          let oldPose = k.pose.slice(0,6);
+          let newPose = CHANNELS.map(c => {
+            let oldIdx = loadedChannels.indexOf(c.key);
+            return oldIdx >= 0 ? oldPose[oldIdx] : c.def;
+          });
+          return { pose: newPose, dt: +k.dt || 500, auto: !!k.auto };
+        });
         selectedKf = -1; els.kfEditor.style.display = 'none';
         renderTimeline();
         toast('Sequence loaded');
