@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ArmDeck — 5-DOF Arm Control</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#EFEDE6; --panel:#FFFFFF; --panel-2:#F7F5EF; --border:#D9D3C4;
+    --ink:#23262B; --ink-muted:#6B6F76; --ink-faint:#9A9E9F;
+    --accent:#B96A2C; --accent-ink:#FFFFFF; --accent-soft:#F1DFC9;
+    --ok:#2F7A5C; --ok-soft:#DCEEE4; --danger:#B5443A; --danger-soft:#F3DBD7;
+    --track:#E4DFD2; --grid:#DED8C9;
+    --shadow: 0 1px 0 rgba(0,0,0,.04);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#11161C; --panel:#1A212A; --panel-2:#161C23; --border:#2B3541;
+      --ink:#ECE8DF; --ink-muted:#95A0AC; --ink-faint:#5E6A76;
+      --accent:#E0A458; --accent-ink:#14181D; --accent-soft:#3A2E1E;
+      --ok:#4FA88B; --ok-soft:#1B3630; --danger:#D1685A; --danger-soft:#3A2320;
+      --track:#232C36; --grid:#212932;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#11161C; --panel:#1A212A; --panel-2:#161C23; --border:#2B3541;
+    --ink:#ECE8DF; --ink-muted:#95A0AC; --ink-faint:#5E6A76;
+    --accent:#E0A458; --accent-ink:#14181D; --accent-soft:#3A2E1E;
+    --ok:#4FA88B; --ok-soft:#1B3630; --danger:#D1685A; --danger-soft:#3A2320;
+    --track:#232C36; --grid:#212932;
+    color-scheme: dark;
+  }
+
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:'Space Grotesk', system-ui, sans-serif;
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+  .mono{ font-family:'JetBrains Mono', ui-monospace, monospace; }
+
+  a{color:inherit;}
+  button{ font-family:inherit; }
+
+  /* ---------- layout shell ---------- */
+  .shell{ max-width:1180px; margin:0 auto; padding:18px 18px 60px; }
+
+  /* ---------- header / console bar ---------- */
+  header.deck{
+    display:flex; align-items:center; gap:14px;
+    background:var(--panel); border:1px solid var(--border);
+    border-radius:4px; padding:10px 14px; box-shadow:var(--shadow);
+    flex-wrap:wrap;
+  }
+  .brand{ display:flex; align-items:center; gap:10px; margin-right:auto; min-width:0; }
+  .logo-slot{
+    width:40px; height:40px; border-radius:4px; overflow:hidden; position:relative;
+    background:var(--panel-2); border:1px solid var(--border); flex:none;
+    cursor:pointer;
+  }
+  .logo-slot img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .logo-slot svg{ width:100%; height:100%; }
+  .logo-slot .hint{
+    position:absolute; inset:0; display:flex; align-items:center; justify-content:center;
+    font-size:8px; text-align:center; color:var(--ink-faint); padding:2px; line-height:1.1;
+    opacity:0; transition:opacity .15s;
+  }
+  .logo-slot:hover .hint{ opacity:1; background:rgba(0,0,0,.55); color:#fff; }
+  .brand-text{ min-width:0; }
+  .brand-text .name{ font-weight:700; font-size:17px; letter-spacing:.2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .brand-text .sub{ font-size:11px; color:var(--ink-muted); white-space:nowrap; }
+
+  .conn-group{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .status-dot{ width:9px; height:9px; border-radius:50%; background:var(--ink-faint); flex:none; }
+  .status-dot.on{ background:var(--ok); box-shadow:0 0 0 3px var(--ok-soft); }
+  .status-dot.err{ background:var(--danger); box-shadow:0 0 0 3px var(--danger-soft); }
+  .status-text{ font-size:12px; color:var(--ink-muted); font-family:'JetBrains Mono',monospace; white-space:nowrap; }
+
+  button.btn{
+    border:1px solid var(--border); background:var(--panel-2); color:var(--ink);
+    padding:8px 13px; border-radius:4px; font-size:13px; font-weight:600;
+    cursor:pointer; letter-spacing:.1px; transition:background .12s, border-color .12s;
+    display:inline-flex; align-items:center; gap:6px; white-space:nowrap;
+  }
+  button.btn:hover{ border-color: var(--ink-faint); }
+  button.btn:disabled{ opacity:.4; cursor:not-allowed; }
+  button.btn.primary{ background:var(--accent); border-color:var(--accent); color:var(--accent-ink); }
+  button.btn.primary:hover{ filter:brightness(1.06); }
+  button.btn.danger{ background:var(--danger-soft); border-color:var(--danger); color:var(--danger); }
+  button.btn.ghost{ background:transparent; }
+  button.icon-btn{
+    border:1px solid var(--border); background:var(--panel-2); color:var(--ink);
+    width:32px; height:32px; border-radius:4px; cursor:pointer; font-size:14px;
+    display:inline-flex; align-items:center; justify-content:center;
+  }
+  button.icon-btn:hover{ border-color:var(--ink-faint); }
+  button.icon-btn:disabled{ opacity:.35; cursor:not-allowed; }
+
+  .browser-warning{
+    margin-top:12px; padding:10px 14px; background:var(--danger-soft); color:var(--danger);
+    border:1px solid var(--danger); border-radius:4px; font-size:13px; display:none;
+  }
+
+  /* ---------- main grid ---------- */
+  .main-grid{
+    position:relative;
+    display:grid; grid-template-columns: 1fr 1.15fr; gap:14px; margin-top:14px;
+  }
+  @media (max-width:820px){ .main-grid{ grid-template-columns:1fr; } }
+  .connector-svg{ position:absolute; inset:0; pointer-events:none; overflow:visible; z-index:1; }
+  @media (max-width:820px){ .connector-svg{ display:none; } }
+  .connector-svg line{ stroke:var(--ink-faint); stroke-width:1.25; }
+
+  .panel{
+    background:var(--panel); border:1px solid var(--border); border-radius:4px;
+    padding:14px; box-shadow:var(--shadow);
+  }
+  .panel h2{
+    margin:0 0 12px; font-size:12px; letter-spacing:.06em; color:var(--ink-muted);
+    font-weight:600; text-transform:uppercase; font-family:'JetBrains Mono',monospace;
+  }
+
+  /* ---------- robot visual panel ---------- */
+  .robot-slot{
+    position:relative; border:1px dashed var(--border); border-radius:4px;
+    background:
+      repeating-linear-gradient(0deg, transparent, transparent 23px, var(--grid) 23px, var(--grid) 24px),
+      repeating-linear-gradient(90deg, transparent, transparent 23px, var(--grid) 23px, var(--grid) 24px),
+      var(--panel-2);
+    min-height:300px; display:flex; align-items:center; justify-content:center;
+    cursor:pointer; overflow:hidden;
+  }
+  .robot-slot img{ width:100%; height:100%; object-fit:contain; }
+  .robot-slot .placeholder{ text-align:center; color:var(--ink-faint); padding:20px; }
+  .robot-slot .placeholder svg{ width:120px; height:120px; opacity:.55; }
+  .robot-slot .placeholder p{ margin:8px 0 0; font-size:12px; }
+  .robot-slot .hint2{
+    position:absolute; bottom:8px; right:8px; font-size:10px; color:var(--ink-muted);
+    background:var(--panel); border:1px solid var(--border); padding:3px 7px; border-radius:3px;
+    font-family:'JetBrains Mono',monospace;
+  }
+  .pin-layer{ position:absolute; inset:0; z-index:2; }
+  .pin{
+    position:absolute; width:20px; height:20px; margin:-10px 0 0 -10px;
+    border-radius:50%; background:var(--accent); color:var(--accent-ink);
+    border:2px solid var(--panel); box-shadow:0 0 0 1px var(--accent);
+    display:flex; align-items:center; justify-content:center;
+    font-family:'JetBrains Mono',monospace; font-size:10px; font-weight:700;
+    cursor:grab; touch-action:none; z-index:3;
+  }
+  .pin:active{ cursor:grabbing; }
+  .calibrate-row{ display:flex; justify-content:space-between; align-items:center; margin-top:8px; gap:8px; }
+  .calibrate-row .hint3{ font-size:10.5px; color:var(--ink-faint); }
+  @media (max-width:820px){ .pin-layer{ display:none; } }
+  .readout-strip{
+    display:grid; grid-template-columns:repeat(6,1fr); gap:6px; margin-top:10px;
+  }
+  @media (max-width:520px){ .readout-strip{ grid-template-columns:repeat(3,1fr); } }
+  .readout-chip{
+    border:1px solid var(--border); border-radius:4px; padding:6px 4px; text-align:center; background:var(--panel-2);
+  }
+  .readout-chip .lbl{ font-size:9px; color:var(--ink-muted); text-transform:uppercase; letter-spacing:.05em; }
+  .readout-chip .val{ font-family:'JetBrains Mono',monospace; font-weight:700; font-size:15px; margin-top:2px; }
+
+  .sync-row{ display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+
+  /* ---------- joint channel strip ---------- */
+  .channel{
+    display:grid; grid-template-columns: 20px 92px 1fr 76px; align-items:center; gap:8px;
+    padding:9px 0; border-bottom:1px solid var(--grid);
+  }
+  .channel:last-child{ border-bottom:none; }
+  .channel .jlabel{ font-size:13px; font-weight:600; }
+  .channel .jrange{ font-size:9px; color:var(--ink-faint); font-family:'JetBrains Mono',monospace; }
+  .chan-dot{
+    width:16px; height:16px; border-radius:50%; background:var(--accent); color:var(--accent-ink);
+    display:flex; align-items:center; justify-content:center; font-size:9px; font-weight:700;
+    font-family:'JetBrains Mono',monospace; flex:none;
+  }
+  .slider-wrap{ display:flex; align-items:center; gap:6px; }
+  input[type=range]{
+    -webkit-appearance:none; appearance:none; width:100%; height:22px; background:transparent; cursor:pointer;
+  }
+  input[type=range]::-webkit-slider-runnable-track{
+    height:6px; border-radius:3px; background:var(--track);
+  }
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none; width:16px; height:16px; border-radius:3px; margin-top:-5px;
+    background:var(--accent); border:2px solid var(--panel); box-shadow:0 0 0 1px var(--accent);
+  }
+  input[type=range]::-moz-range-track{ height:6px; border-radius:3px; background:var(--track); }
+  input[type=range]::-moz-range-thumb{
+    width:14px; height:14px; border-radius:3px; background:var(--accent); border:2px solid var(--panel); box-shadow:0 0 0 1px var(--accent);
+  }
+  .val-box{
+    font-family:'JetBrains Mono',monospace; font-weight:700; text-align:right; font-size:14px;
+    display:flex; align-items:center; justify-content:flex-end; gap:2px;
+  }
+  .val-box span.deg{ color:var(--ink-faint); font-weight:500; font-size:11px; }
+
+  .speed-row{
+    display:flex; align-items:center; gap:10px; margin-top:12px; padding-top:12px; border-top:1px solid var(--grid);
+  }
+  .speed-row .jlabel{ font-size:12px; color:var(--ink-muted); width:92px; flex:none; }
+  .speed-row .val-box{ width:60px; }
+
+  /* ---------- transport / recorder ---------- */
+  .transport{ margin-top:14px; }
+  .transport-controls{ display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .rec-dot{ width:8px; height:8px; border-radius:50%; background:var(--danger); }
+  .rec-dot.blink{ animation:blink 1s steps(1) infinite; }
+  @keyframes blink{ 50%{ opacity:.15; } }
+
+  .timeline-wrap{ margin-top:12px; }
+  .timeline{
+    position:relative; height:46px; border:1px solid var(--border); border-radius:4px;
+    background:var(--panel-2); overflow:hidden; cursor:pointer;
+  }
+  .timeline .track-auto{ position:absolute; top:0; bottom:0; background:var(--accent-soft); }
+  .timeline .mark{
+    position:absolute; top:6px; width:10px; height:10px; transform:translateX(-50%) rotate(45deg);
+    background:var(--panel); border:2px solid var(--accent); border-radius:2px; cursor:pointer;
+  }
+  .timeline .mark.sel{ background:var(--accent); }
+  .timeline .playhead{
+    position:absolute; top:0; bottom:0; width:2px; background:var(--danger); display:none;
+  }
+  .timeline-meta{ display:flex; justify-content:space-between; margin-top:6px; font-size:11px; color:var(--ink-muted); font-family:'JetBrains Mono',monospace; }
+
+  .kf-editor{
+    display:none; margin-top:10px; padding:10px; border:1px solid var(--border); border-radius:4px;
+    background:var(--panel-2); align-items:center; gap:10px; flex-wrap:wrap; font-size:12px;
+  }
+  .kf-editor input[type=number]{
+    width:80px; font-family:'JetBrains Mono',monospace; padding:5px 7px; border:1px solid var(--border);
+    border-radius:3px; background:var(--panel); color:var(--ink);
+  }
+  .kf-pose{
+    flex-basis:100%; display:grid; grid-template-columns:repeat(6,1fr); gap:6px;
+  }
+  @media (max-width:640px){ .kf-pose{ grid-template-columns:repeat(3,1fr); } }
+  .kf-pose-item{ text-align:center; }
+  .kf-pose-item label{ display:block; font-size:8.5px; color:var(--ink-muted); text-transform:uppercase; letter-spacing:.04em; margin-bottom:3px; }
+  .kf-pose-item input{ width:100%; text-align:center; }
+
+  .save-row{ display:flex; gap:8px; margin-top:12px; flex-wrap:wrap; }
+
+  /* ---------- log drawer ---------- */
+  .log-toggle{ margin-top:14px; font-size:11px; color:var(--ink-muted); cursor:pointer; user-select:none; font-family:'JetBrains Mono',monospace; }
+  .log-drawer{
+    display:none; margin-top:8px; background:#0000; border:1px solid var(--border); border-radius:4px;
+    padding:8px 10px; max-height:130px; overflow-y:auto; font-family:'JetBrains Mono',monospace; font-size:11px;
+    color:var(--ink-muted); background:var(--panel-2);
+  }
+  .log-drawer div{ white-space:pre-wrap; padding:1px 0; }
+
+  .toast{
+    position:fixed; bottom:18px; left:50%; transform:translateX(-50%) translateY(10px);
+    background:var(--ink); color:var(--bg); padding:9px 16px; border-radius:4px; font-size:13px;
+    opacity:0; pointer-events:none; transition:opacity .2s, transform .2s; z-index:50;
+  }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+  input[type=file]{ display:none; }
+
+  footer.note{ margin-top:18px; font-size:11.5px; color:var(--ink-faint); line-height:1.5; }
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <header class="deck">
+    <div class="brand">
+      <div class="logo-slot" id="logoSlot" title="Click to set your logo">
+        <svg viewBox="0 0 40 40" xmlns="http://www.w3.org/2000/svg">
+          <rect width="40" height="40" fill="none"/>
+          <path d="M10 28 L10 16 L20 10 L30 16 L30 28" stroke="var(--ink-faint)" stroke-width="2" fill="none" stroke-linejoin="round" stroke-linecap="round"/>
+          <circle cx="20" cy="20" r="3" fill="var(--ink-faint)"/>
+        </svg>
+        <div class="hint">Set logo</div>
+      </div>
+      <div class="brand-text">
+        <div class="name">ArmDeck</div>
+        <div class="sub">5-DOF arm control &amp; sequence recorder</div>
+      </div>
+    </div>
+    <div class="conn-group">
+      <span class="status-dot" id="statusDot"></span>
+      <span class="status-text" id="statusText">disconnected</span>
+      <button class="btn primary" id="btnConnect">Connect</button>
+      <button class="btn ghost" id="btnDisconnect" disabled>Disconnect</button>
+    </div>
+  </header>
+
+  <div class="browser-warning" id="browserWarning">
+    This browser doesn't support the Web Serial API, so ArmDeck can't talk to the arm here. Open this page in Chrome or Edge on desktop instead.
+  </div>
+
+  <div class="main-grid">
+    <svg class="connector-svg" id="connectorSvg"></svg>
+
+    <!-- LEFT: robot visual + readouts -->
+    <div class="panel">
+      <h2>Arm view</h2>
+      <div class="robot-slot" id="robotSlot" title="Click to set your robot image">
+        <div class="placeholder" id="robotPlaceholder">
+          <svg viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="60" cy="100" r="10" stroke="currentColor" stroke-width="3"/>
+            <line x1="60" y1="90" x2="60" y2="65" stroke="currentColor" stroke-width="3"/>
+            <line x1="60" y1="65" x2="35" y2="45" stroke="currentColor" stroke-width="3"/>
+            <line x1="35" y1="45" x2="45" y2="20" stroke="currentColor" stroke-width="3"/>
+            <line x1="45" y1="20" x2="70" y2="15" stroke="currentColor" stroke-width="3"/>
+            <path d="M70 15 L80 8 M70 15 L78 22" stroke="currentColor" stroke-width="3" stroke-linecap="round"/>
+          </svg>
+          <p>Click to add your robot image</p>
+        </div>
+        <div class="hint2">Click to change</div>
+        <div class="pin-layer" id="pinLayer"></div>
+      </div>
+      <div class="calibrate-row">
+        <span class="hint3">Drag the numbered dots onto each joint in your photo</span>
+        <button class="btn ghost" id="btnResetPins">Reset dots</button>
+      </div>
+      <div class="readout-strip" id="readoutStrip"></div>
+      <div class="sync-row">
+        <button class="btn" id="btnSyncArm">Sync pose to arm</button>
+        <button class="btn ghost" id="btnHome">Home (center)</button>
+      </div>
+    </div>
+
+    <!-- RIGHT: joint controls -->
+    <div class="panel">
+      <h2>Joints</h2>
+      <div id="channelList"></div>
+      <div class="speed-row">
+        <div class="jlabel">Move speed</div>
+        <input type="range" id="speedSlider" min="120" max="3000" value="700" step="20">
+        <div class="val-box mono"><span id="speedVal">700</span><span class="deg">ms</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TRANSPORT / RECORDER -->
+  <div class="panel transport">
+    <h2>Sequence</h2>
+    <div class="transport-controls">
+      <button class="btn danger" id="btnRecToggle"><span class="rec-dot" id="recDot"></span> Record live</button>
+      <button class="btn" id="btnCapture">Capture pose</button>
+      <span style="width:1px;height:22px;background:var(--border);"></span>
+      <button class="btn primary" id="btnPlay">▶ Play</button>
+      <button class="btn" id="btnPause" disabled>Pause</button>
+      <button class="btn" id="btnStop" disabled>Stop</button>
+      <label class="btn ghost" style="cursor:pointer;">
+        <input type="checkbox" id="loopCheck" style="margin-right:2px;"> Loop
+      </label>
+      <span style="width:1px;height:22px;background:var(--border);"></span>
+      <button class="btn ghost" id="btnClear">Clear</button>
+    </div>
+
+    <div class="timeline-wrap">
+      <div class="timeline" id="timeline">
+        <div class="playhead" id="playhead"></div>
+      </div>
+      <div class="timeline-meta">
+        <span id="tlDuration">0.0s recorded</span>
+        <span id="tlKfCount">0 keyframes</span>
+      </div>
+    </div>
+
+    <div class="kf-editor" id="kfEditor">
+      <strong style="font-family:'JetBrains Mono',monospace;font-size:11px;">KEYFRAME — motor positions</strong>
+      <div class="kf-pose" id="kfPose"></div>
+      <label>Hold/transition <input type="number" id="kfDuration" min="20" step="10"> ms</label>
+      <button class="btn ghost" id="btnKfJump">Preview</button>
+      <button class="btn danger" id="btnKfDelete">Delete</button>
+      <button class="btn ghost" id="btnKfClose">Close</button>
+    </div>
+
+    <div class="save-row">
+      <button class="btn" id="btnSave">Save sequence…</button>
+      <button class="btn" id="btnLoad">Load sequence…</button>
+      <input type="file" id="fileInput" accept=".json,application/json">
+    </div>
+
+    <div class="log-toggle" id="logToggle">▸ show connection log</div>
+    <div class="log-drawer" id="logDrawer"></div>
+  </div>
+
+  <footer class="note">
+    Connects over USB serial at 9600 baud to firmware expecting <code>index,value\n</code> per channel (1&ndash;6). Works in Chrome / Edge desktop. Click the logo or arm image above to swap in your own art — it's saved in this browser for next time.
+  </footer>
+</div>
+
+<input type="file" id="logoInput" accept="image/*">
+<input type="file" id="robotInput" accept="image/*">
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  /* ---------------- channel config (matches FabriCreator firmware) ---------------- */
+  const CHANNELS = [
+    { key:'base',       label:'Base',        idx:1, min:0, max:180, def:90 },
+    { key:'shoulder',   label:'Shoulder',    idx:2, min:0, max:180, def:90 },
+    { key:'elbow',      label:'Elbow',       idx:3, min:0, max:180, def:90 },
+    { key:'wristRoll',  label:'Wrist Roll',  idx:4, min:0, max:180, def:90 },
+    { key:'wristPitch', label:'Wrist Pitch', idx:5, min:0, max:180, def:90 },
+    { key:'gripper',    label:'Gripper',     idx:6, min:0, max:90,  def:0  },
+  ];
+  const TICK_MS = 50; // 20Hz — safe headroom under 9600 baud for 6 channels
+
+  /* ---------------- state ---------------- */
+  let pose = CHANNELS.map(c => c.def);           // live UI / arm pose
+  let lastSent = CHANNELS.map(() => null);
+  let port = null, writer = null, connected = false;
+  let sequence = [];          // [{pose:[6], dt:ms, auto:bool}]
+  let selectedKf = -1;
+  let isRecording = false;
+  let isPlaying = false, isPaused = false;
+  let playElapsed = 0, playFromPose = null, playTimer = null, recTimer = null;
+  let loopPlayback = false;
+
+  const $ = (id) => document.getElementById(id);
+  const els = {
+    connect: $('btnConnect'), disconnect: $('btnDisconnect'),
+    statusDot: $('statusDot'), statusText: $('statusText'),
+    channelList: $('channelList'), readoutStrip: $('readoutStrip'),
+    speedSlider: $('speedSlider'), speedVal: $('speedVal'),
+    recToggle: $('btnRecToggle'), recDot: $('recDot'),
+    capture: $('btnCapture'), play: $('btnPlay'), pause: $('btnPause'), stop: $('btnStop'),
+    loop: $('loopCheck'), clear: $('btnClear'),
+    timeline: $('timeline'), playhead: $('playhead'),
+    tlDuration: $('tlDuration'), tlKfCount: $('tlKfCount'),
+    kfEditor: $('kfEditor'), kfDuration: $('kfDuration'),
+    kfJump: $('btnKfJump'), kfDelete: $('btnKfDelete'), kfClose: $('btnKfClose'),
+    save: $('btnSave'), load: $('btnLoad'), fileInput: $('fileInput'),
+    logToggle: $('logToggle'), logDrawer: $('logDrawer'),
+    toast: $('toast'), browserWarning: $('browserWarning'),
+    syncArm: $('btnSyncArm'), home: $('btnHome'),
+    logoSlot: $('logoSlot'), robotSlot: $('robotSlot'), robotPlaceholder: $('robotPlaceholder'),
+    logoInput: $('logoInput'), robotInput: $('robotInput'),
+    connectorSvg: $('connectorSvg'), pinLayer: $('pinLayer'), resetPins: $('btnResetPins'),
+    mainGrid: document.querySelector('.main-grid'), kfPose: $('kfPose'),
+  };
+
+  function toast(msg){
+    els.toast.textContent = msg;
+    els.toast.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => els.toast.classList.remove('show'), 2200);
+  }
+  function log(msg){
+    const line = document.createElement('div');
+    const t = new Date().toLocaleTimeString();
+    line.textContent = `[${t}] ${msg}`;
+    els.logDrawer.appendChild(line);
+    els.logDrawer.scrollTop = els.logDrawer.scrollHeight;
+  }
+  function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, Math.round(v))); }
+
+  /* ---------------- persisted images (per-browser, local only) ---------------- */
+  function loadImg(key, slotEl, onSet){
+    try{
+      const v = localStorage.getItem(key);
+      if (v) onSet(v);
+    }catch(e){ /* storage unavailable — ignore, placeholders stay */ }
+  }
+  function saveImgPicker(inputEl, key, onSet){
+    inputEl.addEventListener('change', () => {
+      const f = inputEl.files && inputEl.files[0];
+      if (!f) return;
+      const reader = new FileReader();
+      reader.onload = () => {
+        try{ localStorage.setItem(key, reader.result); }catch(e){ /* too large for storage */ }
+        onSet(reader.result);
+        toast('Image updated');
+      };
+      reader.readAsDataURL(f);
+    });
+  }
+  function setLogo(dataUrl){
+    els.logoSlot.innerHTML = `<img src="${dataUrl}" alt="logo"><div class="hint">Change logo</div>`;
+  }
+  function setRobotImg(dataUrl){
+    els.robotSlot.innerHTML = `<img src="${dataUrl}" alt="robot"><div class="hint2">Click to change</div>`;
+  }
+  els.logoSlot.addEventListener('click', () => els.logoInput.click());
+  els.robotSlot.addEventListener('click', () => els.robotInput.click());
+  saveImgPicker(els.logoInput, 'armdeck.logo', setLogo);
+  saveImgPicker(els.robotInput, 'armdeck.robotImg', setRobotImg);
+  loadImg('armdeck.logo', els.logoSlot, setLogo);
+  loadImg('armdeck.robotImg', els.robotSlot, setRobotImg);
+
+  /* ---------------- build channel UI ---------------- */
+  CHANNELS.forEach((c, i) => {
+    const row = document.createElement('div');
+    row.className = 'channel';
+    row.innerHTML = `
+      <div class="chan-dot" data-dot="${i}">${i+1}</div>
+      <div>
+        <div class="jlabel">${c.label}</div>
+        <div class="jrange">${c.min}&ndash;${c.max}&deg;</div>
+      </div>
+      <div class="slider-wrap">
+        <button class="icon-btn" data-jog="-1" data-i="${i}">&minus;</button>
+        <input type="range" min="${c.min}" max="${c.max}" value="${c.def}" data-i="${i}" class="jslider">
+        <button class="icon-btn" data-jog="1" data-i="${i}">+</button>
+      </div>
+      <div class="val-box mono"><span data-readout="${i}">${c.def}</span><span class="deg">&deg;</span></div>
+    `;
+    els.channelList.appendChild(row);
+
+    const chip = document.createElement('div');
+    chip.className = 'readout-chip';
+    chip.innerHTML = `<div class="lbl">${c.label}</div><div class="val mono" data-chip="${i}">${c.def}&deg;</div>`;
+    els.readoutStrip.appendChild(chip);
+  });
+
+  function refreshUI(i){
+    document.querySelector(`.jslider[data-i="${i}"]`).value = pose[i];
+    document.querySelector(`[data-readout="${i}"]`).textContent = pose[i];
+    document.querySelector(`[data-chip="${i}"]`).textContent = pose[i] + '\u00B0';
+  }
+  CHANNELS.forEach((_, i) => refreshUI(i));
+
+  function setChannel(i, value, {send=true}={}){
+    const c = CHANNELS[i];
+    pose[i] = clamp(value, c.min, c.max);
+    refreshUI(i);
+    if (send) sendChannel(i);
+  }
+
+  document.querySelectorAll('.jslider').forEach(sl => {
+    const i = +sl.dataset.i;
+    sl.addEventListener('input', () => setChannel(i, +sl.value));
+  });
+  document.querySelectorAll('[data-jog]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const i = +btn.dataset.i, dir = +btn.dataset.jog;
+      setChannel(i, pose[i] + dir * 2);
+    });
+  });
+
+  els.speedSlider.addEventListener('input', () => {
+    els.speedVal.textContent = els.speedSlider.value;
+  });
+
+  /* ---------------- joint pins + connector lines ---------------- */
+  const DEFAULT_PINS = [
+    { x:50, y:10 }, { x:50, y:26 }, { x:50, y:42 },
+    { x:50, y:58 }, { x:50, y:74 }, { x:50, y:90 },
+  ];
+  let pins = DEFAULT_PINS.map(p => ({...p}));
+  try{
+    const saved = JSON.parse(localStorage.getItem('armdeck.pins') || 'null');
+    if (Array.isArray(saved) && saved.length === CHANNELS.length) pins = saved;
+  }catch(e){ /* keep defaults */ }
+
+  function renderPins(){
+    els.pinLayer.innerHTML = '';
+    CHANNELS.forEach((c, i) => {
+      const p = document.createElement('div');
+      p.className = 'pin';
+      p.textContent = i + 1;
+      p.title = c.label;
+      p.style.left = pins[i].x + '%';
+      p.style.top = pins[i].y + '%';
+      p.dataset.i = i;
+      els.pinLayer.appendChild(p);
+    });
+    wirePinDrag();
+    recomputeLines();
+  }
+
+  function wirePinDrag(){
+    els.pinLayer.querySelectorAll('.pin').forEach(pinEl => {
+      pinEl.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        const i = +pinEl.dataset.i;
+        pinEl.setPointerCapture(e.pointerId);
+        const move = (ev) => {
+          const rect = els.robotSlot.getBoundingClientRect();
+          const x = clamp((ev.clientX - rect.left) / rect.width * 100, 0, 100);
+          const y = clamp((ev.clientY - rect.top) / rect.height * 100, 0, 100);
+          pins[i] = { x, y };
+          pinEl.style.left = x + '%'; pinEl.style.top = y + '%';
+          recomputeLines();
+        };
+        const up = () => {
+          pinEl.removeEventListener('pointermove', move);
+          pinEl.removeEventListener('pointerup', up);
+          try{ localStorage.setItem('armdeck.pins', JSON.stringify(pins)); }catch(e){}
+        };
+        pinEl.addEventListener('pointermove', move);
+        pinEl.addEventListener('pointerup', up);
+      });
+    });
+  }
+
+  function recomputeLines(){
+    const svg = els.connectorSvg;
+    const gridRect = els.mainGrid.getBoundingClientRect();
+    svg.setAttribute('width', gridRect.width);
+    svg.setAttribute('height', gridRect.height);
+    svg.innerHTML = '';
+    CHANNELS.forEach((_, i) => {
+      const pinEl = els.pinLayer.querySelector(`.pin[data-i="${i}"]`);
+      const dotEl = document.querySelector(`.chan-dot[data-dot="${i}"]`);
+      if (!pinEl || !dotEl) return;
+      const pr = pinEl.getBoundingClientRect();
+      const dr = dotEl.getBoundingClientRect();
+      const x1 = pr.left + pr.width/2 - gridRect.left;
+      const y1 = pr.top + pr.height/2 - gridRect.top;
+      const x2 = dr.left + dr.width/2 - gridRect.left;
+      const y2 = dr.top + dr.height/2 - gridRect.top;
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      line.setAttribute('x1', x1); line.setAttribute('y1', y1);
+      line.setAttribute('x2', x2); line.setAttribute('y2', y2);
+      svg.appendChild(line);
+    });
+  }
+  els.resetPins.addEventListener('click', () => {
+    pins = DEFAULT_PINS.map(p => ({...p}));
+    try{ localStorage.setItem('armdeck.pins', JSON.stringify(pins)); }catch(e){}
+    renderPins();
+  });
+  window.addEventListener('resize', recomputeLines);
+  if ('ResizeObserver' in window){
+    new ResizeObserver(recomputeLines).observe(els.mainGrid);
+  }
+  renderPins();
+  // recompute once more after fonts/images settle
+  setTimeout(recomputeLines, 300);
+
+  /* ---------------- Web Serial transport ---------------- */
+  const hasSerial = 'serial' in navigator;
+  if (!hasSerial) els.browserWarning.style.display = 'block';
+
+  function setStatus(state, text){
+    els.statusDot.className = 'status-dot' + (state === 'on' ? ' on' : state === 'err' ? ' err' : '');
+    els.statusText.textContent = text;
+  }
+
+  async function connect(){
+    if (!hasSerial){ toast('Web Serial not supported in this browser'); return; }
+    try{
+      port = await navigator.serial.requestPort();
+      await port.open({ baudRate: 9600 });
+      writer = port.writable.getWriter();
+      connected = true;
+      setStatus('on', 'connected · 9600 baud');
+      els.connect.disabled = true; els.disconnect.disabled = false;
+      log('Connected to serial port');
+      toast('Connected');
+    }catch(err){
+      setStatus('err', 'connection failed');
+      log('Connect failed: ' + err.message);
+      toast('Could not connect — ' + err.message);
+    }
+  }
+  async function disconnect(){
+    try{
+      if (writer){ try{ writer.releaseLock(); }catch(e){} }
+      if (port){ await port.close(); }
+    }catch(e){ /* ignore */ }
+    port = null; writer = null; connected = false;
+    setStatus('', 'disconnected');
+    els.connect.disabled = false; els.disconnect.disabled = true;
+    log('Disconnected');
+  }
+  els.connect.addEventListener('click', connect);
+  els.disconnect.addEventListener('click', disconnect);
+
+  const encoder = new TextEncoder();
+  async function sendLine(text){
+    if (!connected || !writer) return;
+    try{
+      await writer.write(encoder.encode(text));
+      log('sent ' + text.trim());
+    }catch(err){
+      log('send failed: ' + err.message);
+      setStatus('err', 'write error');
+    }
+  }
+  function sendChannel(i, forcedValue){
+    const v = forcedValue !== undefined ? forcedValue : pose[i];
+    if (lastSent[i] === v) return;
+    lastSent[i] = v;
+    sendLine(`${CHANNELS[i].idx},${v}\n`);
+  }
+  function sendAll(){
+    CHANNELS.forEach((_, i) => { lastSent[i] = null; sendChannel(i); });
+  }
+  els.syncArm.addEventListener('click', () => {
+    if (!connected){ toast('Connect to the arm first'); return; }
+    sendAll();
+    toast('Pose sent to arm');
+  });
+  let homeTimer = null;
+  function animateTo(targetPose, duration){
+    stopPlayback();
+    clearInterval(homeTimer);
+    const start = pose.slice();
+    const startTime = performance.now();
+    els.home.disabled = true;
+    homeTimer = setInterval(() => {
+      const frac = Math.min(1, (performance.now() - startTime) / duration);
+      applyPose(lerpPose(start, targetPose, frac), true);
+      if (frac >= 1){ clearInterval(homeTimer); els.home.disabled = false; }
+    }, TICK_MS);
+  }
+  els.home.addEventListener('click', () => {
+    animateTo(CHANNELS.map(c => c.def), 1400);
+    toast('Homing…');
+  });
+
+  /* ---------------- sequence: recording, timeline, playback ---------------- */
+  function totalDuration(){ return sequence.reduce((s, k) => s + k.dt, 0); }
+  function renderTimeline(){
+    const tl = els.timeline;
+    tl.querySelectorAll('.mark, .track-auto').forEach(n => n.remove());
+    const total = totalDuration() || 1;
+    let t = 0, autoStart = null;
+    sequence.forEach((k, idx) => {
+      if (k.auto){
+        if (autoStart === null) autoStart = t;
+      } else {
+        if (autoStart !== null){ drawAutoBand(autoStart, t, total); autoStart = null; }
+        const mark = document.createElement('div');
+        mark.className = 'mark' + (idx === selectedKf ? ' sel' : '');
+        mark.style.left = ((t + k.dt) / total * 100) + '%';
+        mark.dataset.idx = idx;
+        mark.addEventListener('click', (e) => { e.stopPropagation(); selectKeyframe(idx); });
+        tl.appendChild(mark);
+      }
+      t += k.dt;
+    });
+    if (autoStart !== null) drawAutoBand(autoStart, t, total);
+    els.tlDuration.textContent = (total/1000).toFixed(1) + 's recorded';
+    els.tlKfCount.textContent = sequence.filter(k => !k.auto).length + ' keyframes';
+  }
+  function drawAutoBand(from, to, total){
+    const band = document.createElement('div');
+    band.className = 'track-auto';
+    band.style.left = (from/total*100) + '%';
+    band.style.width = Math.max(0.4, (to-from)/total*100) + '%';
+    els.timeline.appendChild(band);
+  }
+  function renderKfPose(k){
+    els.kfPose.innerHTML = CHANNELS.map((c, i) => `
+      <div class="kf-pose-item">
+        <label>${c.label}</label>
+        <input type="number" class="mono" min="${c.min}" max="${c.max}" value="${k.pose[i]}" data-ci="${i}">
+      </div>
+    `).join('');
+    els.kfPose.querySelectorAll('input').forEach(inp => {
+      inp.addEventListener('change', () => {
+        if (selectedKf < 0) return;
+        const ci = +inp.dataset.ci, c = CHANNELS[ci];
+        const v = clamp(+inp.value || 0, c.min, c.max);
+        inp.value = v;
+        sequence[selectedKf].pose[ci] = v;
+      });
+    });
+  }
+  function selectKeyframe(idx){
+    selectedKf = idx;
+    renderTimeline();
+    const k = sequence[idx];
+    if (!k || k.auto){ els.kfEditor.style.display = 'none'; return; }
+    els.kfEditor.style.display = 'flex';
+    els.kfDuration.value = k.dt;
+    renderKfPose(k);
+  }
+  els.kfClose.addEventListener('click', () => { selectedKf = -1; renderTimeline(); els.kfEditor.style.display='none'; });
+  els.kfDuration.addEventListener('change', () => {
+    if (selectedKf < 0) return;
+    sequence[selectedKf].dt = Math.max(20, +els.kfDuration.value || 500);
+    renderTimeline();
+  });
+  els.kfJump.addEventListener('click', () => {
+    if (selectedKf < 0) return;
+    applyPose(sequence[selectedKf].pose, true);
+  });
+  els.kfDelete.addEventListener('click', () => {
+    if (selectedKf < 0) return;
+    sequence.splice(selectedKf, 1);
+    selectedKf = -1;
+    els.kfEditor.style.display = 'none';
+    renderTimeline();
+  });
+  els.timeline.addEventListener('click', () => { selectedKf = -1; els.kfEditor.style.display='none'; renderTimeline(); });
+
+  function applyPose(p, send){
+    p.forEach((v, i) => setChannel(i, v, { send:false }));
+    if (send) sendAll();
+  }
+
+  // --- capture / live record ---
+  els.capture.addEventListener('click', () => {
+    sequence.push({ pose: pose.slice(), dt: +els.speedSlider.value, auto:false });
+    renderTimeline();
+    toast('Keyframe captured');
+  });
+
+  function setRecording(on){
+    isRecording = on;
+    els.recDot.classList.toggle('blink', on);
+    els.recToggle.classList.toggle('primary', on);
+    els.recToggle.querySelector.length; // no-op guard
+    els.recToggle.lastChild.textContent = on ? ' Stop recording' : ' Record live';
+    if (on){
+      recTimer = setInterval(() => {
+        sequence.push({ pose: pose.slice(), dt: TICK_MS, auto:true });
+        renderTimeline();
+      }, TICK_MS);
+    } else {
+      clearInterval(recTimer);
+    }
+  }
+  els.recToggle.addEventListener('click', () => setRecording(!isRecording));
+
+  // --- playback ---
+  function lerpPose(a, b, f){ return a.map((v, i) => clamp(v + (b[i]-v)*f, CHANNELS[i].min, CHANNELS[i].max)); }
+
+  function stopPlayback(){
+    isPlaying = false; isPaused = false;
+    clearInterval(playTimer);
+    els.playhead.style.display = 'none';
+    els.play.disabled = false; els.pause.disabled = true; els.stop.disabled = true;
+  }
+  function startPlayback(){
+    if (sequence.length === 0){ toast('Nothing recorded yet'); return; }
+    isPlaying = true; isPaused = false; playElapsed = 0; playFromPose = pose.slice();
+    els.play.disabled = true; els.pause.disabled = false; els.stop.disabled = false;
+    els.playhead.style.display = 'block';
+    const total = totalDuration();
+    playTimer = setInterval(() => {
+      if (isPaused) return;
+      playElapsed += TICK_MS;
+      let t = 0, segFrom = playFromPose, segTo = null, segDt = 1, segElapsed = 0;
+      for (let i = 0; i < sequence.length; i++){
+        const k = sequence[i];
+        if (playElapsed <= t + k.dt){
+          segTo = k.pose; segDt = k.dt; segElapsed = playElapsed - t;
+          segFrom = i === 0 ? playFromPose : sequence[i-1].pose;
+          break;
+        }
+        t += k.dt;
+      }
+      els.playhead.style.left = Math.min(100, (playElapsed/total*100)) + '%';
+      if (segTo){
+        const frac = segDt > 0 ? Math.min(1, segElapsed/segDt) : 1;
+        const p = lerpPose(segFrom, segTo, frac);
+        applyPose(p, true);
+      }
+      if (playElapsed >= total){
+        if (loopPlayback){ playElapsed = 0; playFromPose = sequence[sequence.length-1].pose; }
+        else { stopPlayback(); }
+      }
+    }, TICK_MS);
+  }
+  els.play.addEventListener('click', () => { if (isPaused){ isPaused = false; } else { startPlayback(); } });
+  els.pause.addEventListener('click', () => { isPaused = !isPaused; els.pause.textContent = isPaused ? 'Resume' : 'Pause'; });
+  els.stop.addEventListener('click', stopPlayback);
+  els.loop.addEventListener('change', () => loopPlayback = els.loop.checked);
+  els.clear.addEventListener('click', () => {
+    if (sequence.length && !confirm('Clear the whole recorded sequence?')) return;
+    sequence = []; selectedKf = -1; els.kfEditor.style.display='none'; renderTimeline();
+  });
+
+  /* ---------------- save / load ---------------- */
+  els.save.addEventListener('click', async () => {
+    if (sequence.length === 0){ toast('Nothing to save yet'); return; }
+    const payload = JSON.stringify({ app:'armdeck', version:1, channels: CHANNELS.map(c=>c.key), sequence }, null, 2);
+    try{
+      const downloads = await claude.use('downloads');
+      if (downloads){
+        await downloads.save({ filename: 'armdeck-sequence.json', data: payload });
+        toast('Sequence saved');
+        return;
+      }
+    }catch(e){ /* fall through to plain download */ }
+    // fallback for environments without the downloads capability (e.g. a locally opened copy)
+    try{
+      const blob = new Blob([payload], {type:'application/json'});
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'armdeck-sequence.json';
+      a.click();
+      toast('Sequence saved');
+    }catch(e){ toast('Could not save file'); }
+  });
+  els.load.addEventListener('click', () => els.fileInput.click());
+  els.fileInput.addEventListener('change', () => {
+    const f = els.fileInput.files && els.fileInput.files[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try{
+        const data = JSON.parse(reader.result);
+        if (!Array.isArray(data.sequence)) throw new Error('bad file');
+        sequence = data.sequence.map(k => ({ pose: k.pose.slice(0,6), dt: +k.dt || 500, auto: !!k.auto }));
+        selectedKf = -1; els.kfEditor.style.display = 'none';
+        renderTimeline();
+        toast('Sequence loaded');
+      }catch(e){ toast('Could not read that file'); }
+    };
+    reader.readAsText(f);
+  });
+
+  /* ---------------- log drawer toggle ---------------- */
+  els.logToggle.addEventListener('click', () => {
+    const open = els.logDrawer.style.display === 'block';
+    els.logDrawer.style.display = open ? 'none' : 'block';
+    els.logToggle.textContent = (open ? '▸' : '▾') + ' show connection log';
+  });
+
+  renderTimeline();
+})();
+</script>
+</body>
+</html>
