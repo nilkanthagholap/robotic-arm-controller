@@ -406,7 +406,7 @@
 (function(){
   "use strict";
 
-  /* ---------------- channel config (matches FabriCreator firmware) ---------------- */
+  /* ---------------- channel config ---------------- */
   const CHANNELS = [
     { key:'gripper',    label:'Gripper',     idx:6, min:0, max:90,  def:0  },
     { key:'wristPitch', label:'Wrist Pitch', idx:5, min:0, max:180, def:90 },
@@ -489,7 +489,7 @@
   function setLogo(dataUrl){
     els.logoSlot.innerHTML = `<img src="${dataUrl}" alt="logo"><div class="hint">Change logo</div>`;
   }
-    function setRobotImg(dataUrl){
+  function setRobotImg(dataUrl){
     els.robotSlot.innerHTML = `<img src="${dataUrl}" alt="robot"><div class="hint2">Click to change</div>`;
     const img = els.robotSlot.querySelector('img');
     const onReady = () => { renderPins(); };
@@ -609,7 +609,7 @@
     });
   }
 
-    function recomputeLines(){
+  function recomputeLines(){
     const svg = els.connectorSvg;
     const gridRect = els.mainGrid.getBoundingClientRect();
     if (gridRect.width < 1 || gridRect.height < 1) return; // not laid out yet
@@ -640,10 +640,15 @@
   window.addEventListener('resize', recomputeLines);
   if ('ResizeObserver' in window){
     new ResizeObserver(recomputeLines).observe(els.mainGrid);
+    new ResizeObserver(recomputeLines).observe(els.robotSlot);
   }
   renderPins();
-  // recompute once more after fonts/images settle
-  setTimeout(recomputeLines, 300);
+  // Belt-and-suspenders: rather than trying to catch the exact instant the
+  // image/layout settles (image decode timing varies by browser/host), just
+  // keep the lines continuously in sync on a light interval. This guarantees
+  // they're always correct within ~200ms of any layout change, regardless of
+  // what caused it (image load, font swap, zoom, dragging, etc.).
+  setInterval(recomputeLines, 200);
 
   /* ---------------- Web Serial transport ---------------- */
   const hasSerial = 'serial' in navigator;
@@ -820,7 +825,6 @@
     isRecording = on;
     els.recDot.classList.toggle('blink', on);
     els.recToggle.classList.toggle('primary', on);
-    els.recToggle.querySelector.length; // no-op guard
     els.recToggle.lastChild.textContent = on ? ' Stop recording' : ' Record live';
     if (on){
       recTimer = setInterval(() => {
